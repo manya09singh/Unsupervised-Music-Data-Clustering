@@ -1,0 +1,9 @@
+"0","# Print the RMS energy
+cat(""RMS Energy:"", rms_energy, ""\n"")
+"
+"1","RMS Energy:"
+"1"," "
+"1","4610.079"
+"1"," "
+"1","
+"

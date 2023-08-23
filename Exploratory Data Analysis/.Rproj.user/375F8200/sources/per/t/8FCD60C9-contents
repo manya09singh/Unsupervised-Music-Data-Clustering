@@ -1,0 +1,266 @@
+---
+title: "Exploring the Dataset"
+output: html_notebook
+---
+
+### The data - taking a look
+
+```{r}
+
+features <- read.csv('features_30_sec.csv')
+
+#Removing the non-numeric features
+num_features <- features[,!(names(features) %in% c("label", "filename"))]
+
+df <- num_features
+```
+
+
+Taking a look at the numerical data
+
+
+```{r}
+summary(df)
+
+```
+From here it is clear that scaling might be necessary since there are some features in the scale of 10000 and some in the scale of 0.00x
+
+```{r}
+
+#Scaling without centering
+scaled_df <- scale(df, center = FALSE)
+
+summary(scaled_df)
+
+```
+3. Visualizing the non-cepstral features.
+
+```{r}
+
+boxplot(df[,1:18], main = "Boxplot of Raw Features")
+
+boxplot(scale(df, center = FALSE)[,1:18], main = "Box Plot of Scaled Features")
+```
+
+
+key takeaway: the data here when scaled without centering shows each feature with a different center,
+which means it has more variation to offer, which we can leverage in the model based clustering.
+so i have chosen to scale without centering.
+
+4. Visualizing the cepstral features.
+```{r}
+library(pheatmap)
+mfcc_df <- df[,19:58]
+
+pheatmap(scale(mfcc_df,center=FALSE),
+         cluster_rows = FALSE, cluster_cols = FALSE,
+         main = "MFCC Heatmap")
+
+```
+
+
+## Exploring the features:
+
+1. Continuos Time signal vs Discrete Time signal
+ 
+
+```{r}
+# Install and load necessary libraries
+#install.packages("tuneR")
+#install.packages("ggplot2")
+library(tuneR)
+library(ggplot2)
+
+# Specify the path to your .wav file
+wav_file_path <- "C:\\Users\\manya\\Documents\\MIR Thesis\\Plots\\Data\\genres_original\\blues\\blues.00000.wav"
+
+# Read the .wav file
+audio <- readWave(wav_file_path)
+
+# Extract the audio data
+audio_data <- audio@left
+
+# Create a time vector based on the sampling rate
+time <- seq(0, (length(audio_data) - 1) / audio@samp.rate, by = 1 / audio@samp.rate)
+
+# Create a data frame for plotting
+df <- data.frame(time = time, amplitude = audio_data)
+
+# Filter data for the first 4 seconds
+df <- df[df$time <= 4, ]
+
+# Plot the time domain signal using ggplot2
+ggplot(df, aes(x = time, y = amplitude)) +
+  geom_line() +
+  labs(x = "Time (seconds)", y = "Amplitude") +
+  ggtitle("Time Domain Signal of WAV File")
+
+```
+
+```{r}
+
+# Define the desired sampling rate (e.g., GTZAN's sampling rate)
+desired_sampling_rate <- 44100
+
+# Calculate the resampling ratio
+resampling_ratio <- desired_sampling_rate / audio@samp.rate
+
+# Resample the audio data using linear interpolation
+resampled_audio_data <- approx(seq_along(audio_data), audio_data, 
+                                seq(1, length(audio_data), by = resampling_ratio))$y
+
+# Create a time vector based on the new sampling rate
+time <- seq(0, (length(resampled_audio_data) - 1) / desired_sampling_rate, 
+            by = 1 / desired_sampling_rate)
+
+# Create a data frame for plotting
+df <- data.frame(time = time, amplitude = resampled_audio_data)
+
+# Filter data for the first 4 seconds
+df <- df[df$time <= 4, ]
+
+# Plot the discretized time domain signal for the first 4 seconds using ggplot2
+ggplot(df, aes(x = time, y = amplitude)) +
+  geom_line() +
+  labs(x = "Time (seconds)", y = "Amplitude") +
+  ggtitle("Discretized Time Domain Signal (First 4 Seconds) with GTZAN's Sampling Rate")
+```
+The sampled version looks nearly identical to the time domain signal, the information loss is negligible at this sampling rate.
+
+
+2. Visualizing the spectrogram
+
+```{r}
+library(tuneR)
+library(seewave)
+audio_2 <- readWave("C:\\Users\\manya\\Documents\\MIR Thesis\\Plots\\Data\\genres_original\\hiphop\\hiphop.00000.wav")
+audio_2 <- audio_2@left - mean(audio_2@left)
+audio_data <- audio@left-mean(audio@left)
+
+spec <- signal::specgram(x = audio_data, n = 1024, Fs = audio@samp.rate, overlap = 1024 * 0.75)
+
+# normalize and rescale to dB
+P <- abs(spec$S)
+P <- P/max(P)
+
+out <- pmax(1e-6, P)
+dim(out) <- dim(P)
+out <- log10(out) / log10(1e-6)
+
+# plot spectrogram
+image(x = spec$t, y = spec$f, z = t(out), ylab = 'Freq [Hz]', xlab = 'Time [s]', useRaster=TRUE)
+```
+
+3. Calculating the RMS energy
+
+```{r}
+rms_energy <- sqrt(mean(audio@left^2))  # Calculate RMS for the left channel
+
+# Print the RMS energy
+cat("RMS Energy:", rms_energy, "\n")
+```
+4. Visualizing feature distributions
+
+```{r}
+
+
+
+library(dplyr)
+library(ggplot2)
+
+df <- features
+
+# Group observations by label and calculate the mean rms_mean value for each group
+grouped_data <- df %>%
+  group_by(label) %>%
+  summarise(mean_rms_mean = mean(rms_mean))
+  arrange(mean_rms_mean)  # Arrange in ascending order
+
+
+
+# Create a bar plot to visualize the mean rms_mean for each label
+ggplot(grouped_data, aes(x = reorder(label, mean_rms_mean), y = mean_rms_mean, fill = label)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Genres", y = "Mean RMS Energy", title = "Mean RMS Energy Value by Genres") +
+  theme_minimal()
+```
+
+
+
+```{r}
+grouped_data <- df %>%
+  group_by(label) %>%
+  summarise(mean_harmony = mean(spectral_bandwidth_mean)) %>%
+  arrange(mean_harmony)  # Arrange in ascending order
+
+# Create a bar plot to visualize the mean harmony for each label
+ggplot(grouped_data, aes(x = reorder(label, mean_harmony), y = mean_harmony, fill = label)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Label", y = "Mean harmony value", title = "Mean Harmony Value by Label (Ascending)") +
+  theme_minimal()
+```
+
+
+```{r}
+# Group observations by label and calculate the mean tempo value for each group
+grouped_data <- df %>%
+  group_by(label) %>%
+  summarise(mean_tempo = mean(tempo)) %>%
+  arrange(mean_tempo)  # Arrange in ascending order
+
+# Create a bar plot to visualize the mean tempo for each label
+ggplot(grouped_data, aes(x = reorder(label, mean_tempo), y = mean_tempo, fill = label)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Label", y = "Mean tempo value", title = "Mean Tempo Value by Label (Ascending)") +
+  theme_minimal()
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+
+features <- c("spectral_centroid_mean", "spectral_bandwidth_mean", "rolloff_mean", "chroma_stft_mean", "harmony_mean")
+
+# Create a list to store the plots
+plots <- list()
+
+# Loop through each feature, calculate mean by label, and create a bar plot
+for (feature in features) {
+  grouped_data <- df %>%
+    group_by(label) %>%
+    summarise(mean_feature = mean(!!sym(feature))) %>%
+    arrange(mean_feature)  # Arrange in ascending order
+  
+  plot <- ggplot(grouped_data, aes(x = reorder(label, mean_feature), y = mean_feature, fill = label)) +
+    geom_bar(stat = "identity") +
+    labs(x = "Label", y = paste(feature, "value"), title = paste(feature)) +
+    theme_minimal()
+  
+  plots[[feature]] <- plot
+}
+
+# Combine plots using patchwork
+combined_plots <- plots[[1]]
+for (i in 2:length(plots)) {
+  combined_plots <- combined_plots + plots[[i]]
+}
+
+# Display the combined plots
+combined_plots
+
+```
+
+
+```{r}
+library(pheatmap)
+
+pheatmap(scaled_df[,19:58], cluster_rows = F,cluster_cols = F,
+         main = "MFCC Heatmap")
+```
+
+
+
+
+
+

@@ -1,0 +1,7 @@
+"0",""
+"0","features <- read.csv('features_30_sec.csv')"
+"0","num_features <- features[,!(names(features) %in% c(""label"", ""filename""))]"
+"0",""
+"0","df <- num_features"
+"0",""
+"0","scaled_df <- scale(df, center = FALSE)"

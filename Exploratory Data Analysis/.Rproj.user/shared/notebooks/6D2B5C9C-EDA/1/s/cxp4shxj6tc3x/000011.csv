@@ -1,0 +1,2 @@
+"0",""
+"0","boxplot(scale(df, center = FALSE)[,1:18], main = ""Box Plot of Scaled Features"")"

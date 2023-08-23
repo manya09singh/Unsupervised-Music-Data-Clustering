@@ -1,0 +1,51 @@
+"0","library(ggplot2)"
+"2","Warning: package ‘ggplot2’ was built under R version 4.3.1"
+"2","Warning message:
+"
+"2","package ‘tuneR’ was built under R version 4.3.1 
+"
+"0","library(dplyr)"
+"2","Warning: package ‘dplyr’ was built under R version 4.3.1"
+"2","
+Attaching package: ‘dplyr’
+
+"
+"2","The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+"
+"2","The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+"
+"0","library(patchwork)"
+"2","Warning: package ‘patchwork’ was built under R version 4.3.1"
+"0","# Assuming df is your data frame"
+"0",""
+"0","features <- c(""spectral_centroid_mean"", ""spectral_bandwidth_mean"", ""rolloff_mean"", ""chroma_stft_mean"", ""harmony_mean"")"
+"0",""
+"0","# Create a list to store the plots"
+"0","plots <- list()"
+"0",""
+"0","# Loop through each feature, calculate mean by label, and create a bar plot"
+"0","for (feature in features) {"
+"0","  grouped_data <- df %>%"
+"0","    group_by(label) %>%"
+"0","    summarise(mean_feature = mean(!!sym(feature))) %>%"
+"0","    arrange(mean_feature)  # Arrange in ascending order"
+"0","  "
+"0","  plot <- ggplot(grouped_data, aes(x = reorder(label, mean_feature), y = mean_feature, fill = label)) +"
+"0","    geom_bar(stat = ""identity"") +"
+"0","    labs(x = ""Label"", y = paste(feature, ""value""), title = paste(feature)) +"
+"0","    theme_minimal()"
+"0","  "
+"0","  plots[[feature]] <- plot"
+"0","}"
+"0",""
+"0","# Combine plots using patchwork"
+"0","combined_plots <- plots[[1]]"
+"0","for (i in 2:length(plots)) {"
+"0","  combined_plots <- combined_plots + plots[[i]]"
+"0","}"

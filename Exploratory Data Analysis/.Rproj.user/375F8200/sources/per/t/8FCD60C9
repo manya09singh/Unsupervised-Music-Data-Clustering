@@ -1,0 +1,28 @@
+{
+    "id": "8FCD60C9",
+    "path": "~/Clustering Music Data/Exploratory Data Analysis/EDA.Rmd",
+    "project_path": "EDA.Rmd",
+    "type": "r_markdown",
+    "hash": "51147509",
+    "contents": "",
+    "dirty": false,
+    "created": 1692718193643.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "tempName": "Untitled1",
+        "chunk_output_type": "inline",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "263,0",
+        "scrollLine": "255"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1692797176,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1692797176283,
+    "read_only": false,
+    "read_only_alternatives": []
+}
