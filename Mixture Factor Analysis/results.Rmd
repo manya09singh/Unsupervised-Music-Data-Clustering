@@ -1,0 +1,367 @@
+---
+title: "Results"
+output: html_notebook
+---
+
+### Part 1: Clustering ability wrt Variance
+
+Now I will be comparing the results across model based clustering, MFA and MIFA.
+
+
+Re-creating the model based clustering results
+
+```{r}
+library(mclust)
+set.seed(123)
+scaled_df <- scale(df, center = FALSE)
+pca <- prcomp(scaled_df)
+principal_components <- pca$x
+mbc_object <- Mclust(principal_components[,1:19])
+```
+
+
+```{r}
+
+# Calculate pairwise distances in the original space
+original_dist <- dist(principal_components)
+
+# Calculate pairwise distances in the PCA reduced space
+pca_dist <- dist(principal_components[, 1:19])  # Adjust the columns according to your PCA results
+
+# Calculate pairwise distances in the MFA reduced space
+fa_df <- data.frame(res_MFA$Scores$post.eta)
+fa_df
+mfa_dist <- dist(fa_df)
+
+scaled_mfa_dist <-data.frame(res_MIFA$Scores$post.eta)
+smfa_dist <- dist(scaled_mfa_dist)
+
+mifa_df <- data.frame(res_MIFA$Scores$post.eta)
+```
+
+
+Visualizing the pairwise distance between observations across the three differnet clustering approaches, as well as the original data's labels
+
+
+```{r}
+mifa_dist <- dist(mifa_df)
+
+n=1000
+# Create a data frame for plotting
+distances <- data.frame(
+  Method = c(rep("Original", n*(n-1)/2), rep("PCA", n*(n-1)/2), rep("FA", n*(n-1)/2), rep("IFA", n*(n-1)/2)),
+  Distance = c( as.vector(original_dist), as.vector(pca_dist), as.vector(mfa_dist), as.vector(mifa_dist))
+)
+
+# Create a scatter plot of distances
+ggplot(distances, aes(x = Method, y = Distance, color = Method)) +
+  geom_boxplot() +
+  labs(title = "Pairwise Distances Comparison",
+       x = "Method", y = "Pairwise Distance") +
+  theme_minimal()
+
+```
+
+```{r}
+library(cluster)
+
+# Calculate silhouette scores
+mbc_silhouette <- silhouette(mbc_object$classification, dist(principal_components[, 1:19]))
+mfa_silhouette <- silhouette(res_MFA$Clust$MAP, mfa_dist)
+mifa_silhouette <- silhouette(res_MIFA$Clust$MAP, mifa_dist)
+```
+
+```{r}
+
+mean(mbc_silhouette[,3]) - mean(original_silhouette[,3])
+mean(mfa_silhouette[,3]) - mean(original_silhouette[,3])
+mean(mifa_silhouette[,3])- mean(original_silhouette[,3])
+mean(original_silhouette[,3])- mean(original_silhouette[,3])
+
+eval_scores <- data.frame(
+  Method = c("MBC", "MFA", "MIFA","Original"),
+  Silhouette_Score = c(mean(mbc_silhouette[,3]), mean(mfa_silhouette[,3]), mean(mifa_silhouette[,3]), mean(original_silhouette[,3])),
+  ARI_Score = c(adjustedRandIndex(mbc_object$classification,true_labels), adjustedRandIndex(res_MFA$Clust$MAP, true_labels), adjustedRandIndex(res_MIFA$Clust$MAP, true_labels), adjustedRandIndex(true_labels,true_labels)))
+
+eval_scores
+
+```
+
+```{r}
+original_silhouette <- silhouette(as.numeric(factor(features$label)),dist(scaled_df))
+
+# Combine silhouette scores into a data frame
+silhouette_scores <- data.frame(
+  Method = rep(c("MBC", "MFA", "MIFA","Original"), each = n),
+  SilhouetteScore = c(mbc_silhouette[,3], mfa_silhouette[,3], mifa_silhouette[,3], original_silhouette[,3])
+)
+
+# Create a boxplot to compare silhouette scores
+ggplot(silhouette_scores, aes(x = Method, y = SilhouetteScore, fill = Method)) +
+  geom_boxplot() +
+  labs(title = "Silhouette Score Comparison",
+       x = "Method", y = "Silhouette Score") +
+  theme_minimal()
+
+```
+
+
+
+
+```{r}
+
+for (k in 1:5){
+  pheatmap(mbc_object$parameters$variance$sigma[,,k],
+         cluster_rows = F, cluster_cols = F, main = paste0("Covariance matrix of cluster ", k))
+}
+```
+
+
+```{r}
+library(pheatmap)
+library(dplyr)
+
+# Extract factor loadings and cluster labels
+factor_loadings <- res_MFA$Scores$post.eta[, 1:2]
+cluster_labels <- res_MFA$Clust$MAP
+
+# Create a data frame with factor loadings and cluster labels
+factor_loading_data <- data.frame(Factor1 = res_MFA$Scores$post.eta[, 1],
+                                  Factor2 = res_MFA$Scores$post.eta[, 2], 
+                                  Cluster = cluster_labels)
+# Calculate the mean values of Factor1 and Factor2 for each cluster
+cluster_means <- factor_loading_data %>%
+  group_by(Cluster) %>%
+  summarize(Mean_Factor1 = mean(Factor1),
+            Mean_Factor2 = mean(Factor2))
+
+# Print the resulting data frame with cluster means
+pheatmap(cluster_means[,2:3], cluster_rows = F, cluster_cols = F)
+
+factor_loading_data
+
+# Sort the data frame by cluster labels for better visualization
+factor_loading_data <- factor_loading_data[order(cluster_labels), ]
+
+# Create a heatmap with cluster labels
+heatmap_plot <- pheatmap(data.frame(Factor1 = factor_loading_data$Factor1,
+                                    Factor2 = factor_loading_data$Factor2),
+                         cluster_rows = FALSE,
+                         cluster_cols = FALSE,
+                         main = "Factor Loadings Heatmap with Cluster Labels")
+
+# Display the heatmap plot
+print(heatmap_plot)
+
+
+pheatmap(res_MFA$Loadings$post.load$Cluster1, cluster_rows = F, cluster_cols = F, main = paste0("MFA Cluster 1 Factor Loadings"))
+pheatmap(res_MFA$Loadings$post.load$Cluster2, cluster_rows = F, cluster_cols = F)
+pheatmap(res_MFA$Loadings$post.load$Cluster3, cluster_rows = F, cluster_cols = F)
+pheatmap(res_MFA$Loadings$post.load$Cluster4, cluster_rows = F, cluster_cols = F)
+pheatmap(res_MFA$Loadings$post.load$Cluster5, cluster_rows = F, cluster_cols = F)
+pheatmap(res_MFA$Loadings$post.load$Cluster6, cluster_rows = F, cluster_cols = F)
+
+library(pheatmap)
+
+# Combine factor loadings for all clusters into a single matrix
+all_loadings <- do.call(cbind, res_MFA$Loadings$post.load)
+
+# Create a new matrix with missing values filled with zeros
+combined_loadings <- matrix(0, nrow = nrow(all_loadings), ncol = length(res_MFA$Loadings$post.load))
+for (i in 1:length(res_MFA$Loadings$post.load)) {
+  combined_loadings[, i] <- ifelse(all_loadings[, i] != 0, all_loadings[, i], NA)
+}
+
+# Define color scales for each cluster
+color_scales <- lapply(1:length(res_MFA$Loadings$post.load), function(i) {
+  colorRampPalette(c("white", "blue"))(100)
+})
+
+combined_loadings
+
+# Plot the combined factor loadings using pheatmap
+pheatmap(combined_loadings, cluster_rows = FALSE, cluster_cols = FALSE)
+
+
+
+
+```
+
+```{r}
+
+library(ggplot2)
+
+# Extract factors and cluster labels
+factors <- data.frame(res_MFA$Scores$post.eta)
+cluster_labels <- res_MFA$Clust$MAP
+
+# Combine factors and cluster labels into a data frame
+cluster_data <- data.frame(Factor1 = res_MFA$Scores$post.eta[,1],
+                           Factor2 = res_MFA$Scores$post.eta[,2], 
+                           Cluster = as.factor(cluster_labels))
+
+# Calculate cluster centers
+cluster_centers <- aggregate(. ~ Cluster, data = cluster_data, mean)
+
+# Calculate cluster centers
+library(dplyr)
+cluster_centers <- cluster_data %>%
+  group_by(Cluster) %>%
+  summarize(mean_Factor1 = mean(Factor1), mean_Factor2 = mean(Factor2))
+
+# Create a heatmap plot
+heatmap_plot <- ggplot(cluster_centers, aes(x = mean_Factor1, y = mean_Factor2, fill = Cluster)) +
+  geom_tile() +
+  scale_fill_discrete() +
+  labs(title = "Cluster Centers Heatmap",
+       x = "Factor 1", y = "Factor 2",
+       fill = "Cluster") +
+  theme_minimal()
+
+# Display the heatmap plot
+print(heatmap_plot)
+
+```
+
+
+
+Plot for MFA clusters and table for mfa clusters
+Scaled vs Raw same result.
+
+
+```{r}
+library(ggplot2)
+library(plotly)
+
+# Assuming principal_components is a data frame containing the first three principal components
+# and mbc_object$classification contains the cluster labels
+
+# Create a data frame combining the principal components and cluster labels
+data_for_plot <- data.frame(
+  PC1 = principal_components[,1],
+  PC2 = principal_components[,2],
+  PC3 = principal_components[,3],
+  Cluster = factor(mbc_object$classification)
+)
+
+
+plot <- plot_ly(data_for_plot, x = ~PC1, y = ~PC2, z = ~PC3, color = ~Cluster, type = "scatter3d", mode = "markers")
+
+# Customize the plot appearance
+plot <- plot %>%
+  layout(title = "3D Scatter Plot of First 3 Principal Components with Cluster Groups")
+
+# Display the plot
+plot
+
+# Create a scatterplot matrix
+pairs(data_for_plot[, c("PC1", "PC2", "PC3")],
+      col = data_for_plot$Cluster,
+      pch = 19,
+      main = "Pairs plot of principal components")
+
+```
+
+
+```{r}
+# Create a data frame combining the principal components and cluster labels
+data_for_plot <- data.frame(
+  FA1 = res_MIFA$Scores$post.eta[,1],
+  FA2 = res_MIFA$Scores$post.eta[,2],
+  FA3 = res_MIFA$Scores$post.eta[,3],
+  FA4 = res_MIFA$Scores$post.eta[,4],
+  FA5 = res_MIFA$Scores$post.eta[,5],
+  FA6 = res_MIFA$Scores$post.eta[,6],
+  FA7 = res_MIFA$Scores$post.eta[,7],
+  FA8 = res_MIFA$Scores$post.eta[,8],
+  FA9 = res_MIFA$Scores$post.eta[,9],
+  FA10 = res_MIFA$Scores$post.eta[,10],
+  FA11 = res_MIFA$Scores$post.eta[,11],
+  Cluster = factor(res_MIFA$Clust$MAP)
+)
+data_for_plot
+
+# Create a scatterplot matrix
+pairs(data_for_plot[,c("FA1", "FA2","FA3")],
+      col = data_for_plot$Cluster,
+      pch = 19,
+      main = "Pairs plot of Factors")
+
+```
+
+```{r}
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=1)
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=2)
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=3)
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=4)
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=5)
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=6)
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=7)
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=8)
+
+```
+```{r}
+plot(res_MFA, plot.meth = "zlabels",zlabels = factor(features$label))
+
+plot(apply(scale(df[res_MFA$Clust$MAP=="5",], 
+                 center = FALSE),2,mean)-apply(scale(df[res_MFA$Clust$MAP=="7",], center = FALSE),2,mean),
+     xlab = "Feature Number")
+```
+
+From the above cluster analysis it appears that clusters 3 and 4 have a lot of variation in the genres clustered together. its possible that this is the noise cluster
+
+to observe it more closely I will look into the uncertain obervations, and see how many of them fall into cluster 3 and 4
+
+```{r}
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=3)
+plot(res_MFA, plot.meth="means", param="loadings", heat.map=TRUE, g=4)
+
+```
+It can be seen that the heatmap shows two factors each with an opposing gradient
+in factor 1 the positive loadings are seen for MFCCs and negative loadings for non MFCCs
+
+The same is entirely reversed in factor 2
+
+This clearly shows the large variation in the factors causing these to become almost noise clusters
+
+
+its hard to pick which genre is seen in clusters 3 and 4 as well
+cluster 3 looks to be hiphop/blues/classical/jazz
+cluster 4 looks like classical/jazz/blues
+
+
+the defining differences in the heat map seems to be about percetr_mean and harmony_mean
+
+
+
+
+
+
+```{r}
+plot(res_MIFA$Loadings$post.load$Cluster1, col = "cyan", pch= 16, main = "Cluster 1 and 6")
+points(res_MIFA$Loadings$post.load$Cluster2, col = "black", pch = 16)
+points(res_MIFA$Loadings$post.load$Cluster3, col = "yellow",pch = 16)
+points(res_MIFA$Loadings$post.load$Cluster4, col = "red", pch = 16)
+points(res_MIFA$Loadings$post.load$Cluster5, col = "purple",pch = 16)
+points(res_MIFA$Loadings$post.load$Cluster6, col = "black", pch = 16)
+
+
+
+plot(res_MIFA$Loadings$post.load$Cluster3, col = "purple", pch= 16, main = "Cluster 3 and 4")
+points(res_MIFA$Loadings$post.load$Cluster4, col = "pink", pch = 16)
+
+
+```
+From this it can be clearly seen that the uncertain observations belong almost equally in each cluster, however for clusters 3 and 4, given their smaller size, the amount of uncertainty inside those clusters could cause it to be the noise cluster
+
+
+cluster 1 and 7 have a relatively higher number of observations, so the higher percentage of uncertain observations is warranted.
+
+
+
+Cluster 1 analysis:
+
+
+
+
+

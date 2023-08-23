@@ -5,6 +5,22 @@ output: html_notebook
 
 ### Part 2: Using K-Means
 
+Setting up the data
+
+```{r}
+
+features <- read.csv('features_30_sec.csv')
+num_features <- features[,!(names(features) %in% c("label", "filename"))]
+
+df <- num_features
+
+scaled_df <- scale(df, center = F)
+
+
+```
+
+
+
 Finding the optimum value of k:
 
 

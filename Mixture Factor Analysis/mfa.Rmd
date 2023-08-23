@@ -1,0 +1,346 @@
+---
+title: "MFA Application on Music Data"
+output: html_notebook
+---
+### Part 1: Using MFA
+
+Setting up the data
+
+```{r}
+features <- read.csv('features_30_sec.csv')
+num_features <- features[,!(names(features) %in% c("label", "filename"))]
+
+df <- num_features
+
+```
+
+
+
+Applying the MFA model on the raw data, using scaling without centering.
+The MFA model requires the following input:
+1. Range of values of Q
+2. Range of values of G
+
+Here I have use 6-12 clusters as the exploratory analysis suggested this.
+I have used 2:15 factors as the number of features in the reduced dimension space are around this number.
+```{r}
+
+set.seed(123)
+sim_IMFA_raw <- mcmc_IMIFA(df,
+                       method = 'MFA',
+                       centering= FALSE, 
+                       scaling= "unit",
+                       n.iters = 100,
+                       storage = storeControl(score.switch = TRUE),
+                       range.Q = 2:15,
+                       range.G = 6:12,
+                       verbose=TRUE)
+```
+
+
+Viewing the results of the MFA clustering.
+
+```{r}
+set.seed(123)
+true_labels <- features$label
+res_MFA <- get_IMIFA_results(sim_IMFA_raw)
+summary(res_MFA)
+```
+
+The results suggest the following:
+
+1. 6 clusters are formed from the GTZAN data set.
+2. Each clusters used 2 factors to represent the songs inside it.
+
+Table of results: MFA clusters vs Original labels
+
+```{r}
+table(res_MFA$Clust$MAP, true_labels)
+```
+
+
+```{r}
+library(ggplot2)
+
+# Assuming you have the necessary libraries loaded and the data prepared
+
+# Create a data frame
+plot_data <- data.frame(
+  FA1 = res_MFA$Scores$post.eta[, 1],
+  FA2 = res_MFA$Scores$post.eta[, 2],
+  Cluster = factor(res_MFA$Clust$MAP)
+)
+
+# Scatter plot of PC1 vs PC2 with ggplot2
+ggplot(plot_data, aes(x = FA1, y = FA2, color = Cluster)) +
+  geom_point(pch = 16) +
+  labs(title = "MFA Raw: FA1 vs FA2")
+```
+Now looking at the factor loadings in each cluster specifically to understand which features define each cluster
+
+```{r}
+
+pheatmap(res_MFA$Loadings$post.load$Cluster1, 
+         cluster_rows = F, cluster_cols = F,
+         main = paste0("MFA Cluster 1 Factor Loadings"))
+
+pheatmap(res_MFA$Loadings$post.load$Cluster2, 
+         cluster_rows = F, cluster_cols = F, 
+         main = paste0("MFA Cluster 2 Factor Loadings"))
+
+pheatmap(res_MFA$Loadings$post.load$Cluster3, 
+         cluster_rows = F, cluster_cols = F, 
+         main = paste0("MFA Cluster 3 Factor Loadings"))
+
+pheatmap(res_MFA$Loadings$post.load$Cluster4,
+         cluster_rows = F, cluster_cols = F,
+         main = paste0("MFA Cluster 4 Factor Loadings"))
+
+pheatmap(res_MFA$Loadings$post.load$Cluster5, 
+         cluster_rows = F, cluster_cols = F,
+         main = paste0("MFA Cluster 5 Factor Loadings"))
+
+pheatmap(res_MFA$Loadings$post.load$Cluster6, 
+         cluster_rows = F, cluster_cols = F,
+         main = paste0("MFA Cluster 6 Factor Loadings"))
+```
+
+The estimated parameters of the MFA clustering process:
+
+```{r}
+
+res_MFA$GQ.results$G
+
+res_MFA$GQ.results$Q
+
+
+res_MFA$GQ.results$Criteria$BICMs
+
+```
+The mixing proportions of each cluster:
+
+```{r}
+res_MFA$Clust$post.ratio
+```
+Here majority of the songs are clustered into cluster 6
+
+The least are seen in cluster 3.
+
+Now viewing the mean and variance of each cluster distribution:
+
+```{r}
+pheatmap(res_MFA$Means$mus$Cluster1, cluster_rows = F, cluster_cols = F, main = "Cluster 1")
+pheatmap(res_MFA$Means$mus$Cluster2, cluster_rows = F, cluster_cols = F, main = "Cluster 2")
+pheatmap(res_MFA$Means$mus$Cluster3, cluster_rows = F, cluster_cols = F, main = "Cluster 3")
+pheatmap(res_MFA$Means$mus$Cluster4, cluster_rows = F, cluster_cols = F, main = "Cluster 4")
+pheatmap(res_MFA$Means$mus$Cluster5, cluster_rows = F, cluster_cols = F, main = "Cluster 5")
+pheatmap(res_MFA$Means$mus$Cluster6, cluster_rows = F, cluster_cols = F, main = "Cluster 6")
+```
+This gives a clearer perception of how the clusters vary in terms of their features. 
+
+
+
+Now visualizing how the clusters are formed among just the two factors overall
+
+```{r}
+
+# Create a data frame combining the principal components and cluster labels
+data_for_plot <- data.frame(
+  FA1 = res_MFA$Scores$post.eta[,1],
+  FA2 = res_MFA$Scores$post.eta[,2],
+  Cluster = factor(res_MFA$Clust$MAP)
+)
+
+
+# Create a scatterplot matrix
+pairs(data_for_plot[,c("FA1", "FA2")],
+      col = data_for_plot$Cluster,
+      pch = 19,
+      main = "Pairs plot of Factors")
+
+```
+Exploring the uncertainty in clustering:
+
+All the songs classified with probability of belonging to that cluster = 1
+
+```{r}
+clusters_df <-data.frame(res_MFA$Clust$post.prob)
+
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster1==1,])),]$label)
+
+```
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster2==1,])),]$label)
+```
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster3==1,])),]$label)
+```
+
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster4==1,])),]$label)
+```
+
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster5==1,])),]$label)
+```
+
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster6==1,])),]$label)
+```
+
+Now looking at those songs clustered with the lowest probability of belonging to the cluster it was allocated to.
+
+```{r}
+
+which(res_MFA$Clust$uncertainty$v>0.4)
+res_MFA$Clust$uncertainty$i
+
+df[which(res_MFA$Clust$uncertainty$v>0.4),]
+
+uncertain_indices <- as.numeric(rownames(df[which(res_MFA$Clust$uncertainty$v>0.4),]))
+table(res_MFA$Clust$MAP, true_labels)
+table(res_MFA$Clust$MAP[uncertain_indices])
+table(res_MFA$Clust$MAP)
+table(res_MFA$Clust$MAP[uncertain_indices])/table(res_MFA$Clust$MAP)
+
+
+```
+From this it is clear that most of the songs that see a high level of uncertainty in clustering are all songs that belong to the blues genre,and a few from the classical genre.
+
+
+
+## Part 2: Using MIFA
+
+Applying the MIFA function requires the following:
+1. Range of values of G
+
+
+The range given here is the same as in MFA (6 to 12)
+
+```{r}
+set.seed(123)
+sim_MIFA <- mcmc_IMIFA(df,
+                       method = 'MIFA',
+                       centering= FALSE, 
+                       scaling= "unit",
+                       n.iters = 100,
+                       storage = storeControl(score.switch = TRUE),
+                       range.G = 6:12,
+                       verbose=TRUE)
+
+```
+
+Viewing the results of MIFA clustering
+
+```{r}
+
+res_MIFA <- get_IMIFA_results(sim_MIFA)
+summary(res_MIFA)
+
+```
+
+```{r}
+table(res_MIFA$Clust$MAP, true_labels)
+
+```
+
+Now here each cluster is formed using a different number of factors, that is visualizing each cluster using only the first two factors may not give an accurate understanding of their positions in space. 
+
+```{r}
+pheatmap(res_MIFA$Loadings$post.load$Cluster1, 
+         cluster_rows = F, cluster_cols = F,
+         main = paste0("MIFA Cluster 1 Factor Loadings"))
+
+pheatmap(res_MIFA$Loadings$post.load$Cluster2, 
+         cluster_rows = F, cluster_cols = F, 
+         main = paste0("MIFA Cluster 2 Factor Loadings"))
+
+pheatmap(res_MIFA$Loadings$post.load$Cluster3, 
+         cluster_rows = F, cluster_cols = F, 
+         main = paste0("MIFA Cluster 3 Factor Loadings"))
+
+pheatmap(res_MIFA$Loadings$post.load$Cluster4,
+         cluster_rows = F, cluster_cols = F,
+         main = paste0("MIFA Cluster 4 Factor Loadings"))
+
+pheatmap(res_MIFA$Loadings$post.load$Cluster5, 
+         cluster_rows = F, cluster_cols = F,
+         main = paste0("MIFA Cluster 5 Factor Loadings"))
+
+pheatmap(res_MIFA$Loadings$post.load$Cluster6, 
+         cluster_rows = F, cluster_cols = F,
+         main = paste0("MIFA Cluster 6 Factor Loadings"))
+```
+The prbability of belonging to each cluster (pi)
+
+```{r}
+res_MIFA$Clust$post.pi
+```
+Highest is of cluster 6 and lowest of cluster 3. This is in agreement of the MFA results. 
+
+
+```{r}
+plot(res_MIFA, plot.meth = 'zlabels', zlabels = factor(features$label))
+```
+
+
+```{r}
+# Create a data frame combining the principal components and cluster labels
+data_for_plot <- data.frame(
+  FA1 = res_MIFA$Scores$post.eta[,1],
+  FA2 = res_MIFA$Scores$post.eta[,2],
+  FA3 = res_MIFA$Scores$post.eta[,3],
+  FA4 = res_MIFA$Scores$post.eta[,4],
+  Cluster = factor(res_MFA$Clust$MAP)
+)
+
+
+# Create a scatterplot matrix
+pairs(data_for_plot[,c("FA1", "FA2","FA3","FA4")],
+      col = data_for_plot$Cluster,
+      pch = 19,
+      main = "Pairs plot of Factors")
+```
+Exploring the uncertainty in clustering:
+
+All the songs classified with probability of belonging to that cluster = 1
+
+```{r}
+clusters_df <-data.frame(res_MIFA$Clust$post.prob)
+
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster1==1,])),]$label)
+
+```
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster2==1,])),]$label)
+```
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster3==1,])),]$label)
+```
+
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster4==1,])),]$label)
+```
+
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster5==1,])),]$label)
+```
+
+```{r}
+table(features[as.numeric(rownames(clusters_df[clusters_df$Cluster6==1,])),]$label)
+```
+
+Now exploring those with highest uncertainty
+
+```{r}
+which(res_MIFA$Clust$uncertainty$v>0.4)
+res_MFA$Clust$uncertainty$i
+
+table(features[which(res_MIFA$Clust$uncertainty$v>0.4),]$label)
+
+
+
+```
+MIFA says that the genres from which songs see the higest uncertainty belong to blues, country and classical. 
+This aligns with MFA, however MIFA is also able to factor in country 
+
