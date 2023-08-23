@@ -1,0 +1,616 @@
+---
+title: "Model Based Clustering"
+output: html_notebook
+---
+
+So far we tried the usual distance based clustering techniques that assume spherical clusters and perform various distance based clustering techniques.
+
+Parametric Clustering approach 1
+
+### Model Based Clustering on the raw data
+Now we will try a Bayesian approach that creates a probabilistic model approach of clustering data into mixtures of Gaussian distributions. this is done using model based clustering. 
+
+Setting up the data
+
+```{r}
+
+features <- read.csv('features_30_sec.csv')
+num_features <- features[,!(names(features) %in% c("label", "filename"))]
+
+df <- num_features
+
+scaled_df <- scale(df, center = F)
+
+
+```
+
+
+
+```{r}
+library(mclust)
+
+
+mc_raw <-Mclust(df)
+summary(mc_raw)
+mc_raw$BIC
+
+```
+This model has resulted in all the data being grouped into one single cluster. This only signifies the presence of redundant feature information that needs to be removed.
+
+Lets try it on the scaled data 
+
+
+```{r}
+#!!!!!!!!dont run this it will freeze
+#mc_scaled <- Mclust(scaled_df)
+```
+This froze at 18%
+
+Scaling the data did not help in allowing model based clustering to run.
+It in fact did not even run.
+
+So we will need to reduce the dimension to allow any clustering
+
+#### Part 1: Trying PCA on scaled data and then using Model Based clustering
+```{r}
+set.seed(123)
+scaled_df <- scale(num_features, center = FALSE)
+pca <- prcomp(scaled_df)
+# Extract the principal components
+principal_components <- pca$x
+# Access the variance explained by each principal component
+variance_explained <- pca$sdev^2
+
+# Access the proportion of variance explained by each principal component
+proportion_variance_explained <- variance_explained / sum(variance_explained)
+cumulative_proportion_explained <- cumsum(proportion_variance_explained)  # Calculate cumulative proportion
+
+sum(proportion_variance_explained[1:15])
+
+```
+
+```{r}
+library(ggplot2)
+# Create a data frame for the scree plot
+scree_data <- data.frame(
+  Principal_Component = 1:length(proportion_variance_explained),
+  Cumulative_Proportion_Explained = cumulative_proportion_explained
+)
+
+# Calculate the principal component index where cumulative variance reaches 85%
+threshold_pc <- min(which(cumulative_proportion_explained >= 0.84))
+
+# Create the scree plot using ggplot2 with improved aesthetics
+ggplot(scree_data, aes(x = Principal_Component, y = Cumulative_Proportion_Explained)) +
+  geom_bar(stat = "identity", fill = "#3498db", alpha = 0.7, width = 0.4) +  # Adjust width
+  geom_bar(data = subset(scree_data, Principal_Component >= threshold_pc), 
+           aes(x = Principal_Component, y = Cumulative_Proportion_Explained),
+           stat = "identity", fill = "#e74c3c", alpha = 0.7, width = 0.4) +  # Adjust width
+  labs(x = "Principal Component", y = "Cumulative Proportion Explained") +
+  ggtitle("Cumulative Proportion Explained by Principal Components") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+```
+
+```{r}
+df_dr <- principal_components[,1:15]
+mc_dr <- Mclust(df_dr)
+
+summary(mc_dr)
+
+
+mc_dr_labels <- mc_dr$classification
+
+true_labels <- features$label
+ari_mc <- adjustedRandIndex(true_labels, mc_dr_labels)
+ari_mc
+```
+
+
+
+```{r}
+
+plot(principal_components[,1:15], col=mc_dr_labels, pch=19,
+     main = 'Model Based Clustering Results (on Scaled data PCA)')
+
+
+```
+
+Using 15 principal components, the reduced dimension data is able to represnet 86% of the variation in the data set.
+The model based clustering on this data produces the following results:
+
+```{r}
+library(mclust)
+set.seed(123)
+model_based_clusters <- Mclust(principal_components[,1:15])
+plot(model_based_clusters, what="BIC")
+model_based_clusters$G
+```
+
+Observations so far:
+4 PC --> ARI: 12% (8 clusters)
+5 PC --> ARI: 13% ( 9 clusters)
+6 PC --> ARI: 14% ( 9 clusters)
+8 PC --> ARI: 16% ( 9 clusters)
+
+What I observed is that for different number of principal components considered, the number of clusters generated also changes. This implies an analysis to see how many components gives the best set of clusters
+
+therefore an analysis is done by varying the number of principal components from 5 to 25, to see at which point the best model is found using the BIC.
+
+```{r}
+library(cluster)
+library(mclust)
+set.seed(123)
+
+# Lists to store results
+avg_silhouette_scores <- list()
+ari_scores <- list()
+num_clusters_list <- list()
+best_bic_list <- list()
+
+for (k in 5:25){
+  mbc_data <- pca$x
+  model_based_clusters <- Mclust(mbc_data[,1:k])
+
+  # Calculate silhouette score
+  silhouette_score <- silhouette(model_based_clusters$classification, dist(mbc_data[,1:k], "euclidean"))
+  avg_silhouette_score <- mean(silhouette_score[,3])
+  avg_silhouette_scores[[as.character(k)]] <- avg_silhouette_score
+  
+  # Calculate ARI
+  ari_score <- adjustedRandIndex(model_based_clusters$classification, true_labels)
+  ari_scores[[as.character(k)]] <- ari_score
+  
+  # Save number of clusters
+  num_clusters <- length(unique(model_based_clusters$classification))
+  num_clusters_list[[as.character(k)]] <- num_clusters
+  
+  # Save BIC of the best model
+  best_bic <- max(model_based_clusters$bic)
+  best_bic_list[[as.character(k)]] <- best_bic
+}
+
+# Combine results into data frame
+results_df <- data.frame(
+  "Number of Principal Components" = 5:25,
+  "Number of Clusters" = unlist(num_clusters_list),
+  "Avg Silhouette Score" = unlist(avg_silhouette_scores),
+  "Best BIC" = unlist(best_bic_list)
+  )
+
+# Print the results data frame
+print(results_df)
+
+```
+
+```{r}
+
+library(cluster)
+library(mclust)
+set.seed(123)
+model_based_clusters <- Mclust(principal_components[,1:19])
+
+# Calculate silhouette score
+silhouette_score <- silhouette(model_based_clusters$classification, dist(df, "euclidean"))
+plot(silhouette_score)
+sortSilhouette(silhouette_score)
+mean(silhouette_score[,3])
+# Print the silhouette score
+print(silhouette_score)
+```
+
+
+```{r}
+library(mclust)
+set.seed(123)
+scaled_df <- scale(df, center = FALSE)
+pca <- prcomp(scaled_df)
+principal_components <- pca$x
+model_based_clusters <- Mclust(principal_components[,1:15])
+plot(model_based_clusters, what="BIC")
+mbc_labels <- model_based_clusters$classification
+
+table(mbc_labels,true_labels)
+
+# Define the mapping of cluster numbers to colors
+color_mapping <- c("red", "blue", "green", "orange", "purple", "yellow", "grey" ,"brown","black")
+
+# Plot the cluster results
+plot(principal_components[, 1:15], col = color_mapping[mbc_labels], pch = 19,
+     main = 'Model Based Clustering Results (on Scaled data PCA)')
+
+# Create the legend
+legend("topright", legend = 1:9, col = color_mapping, pch = 19)
+
+
+```
+
+
+
+
+```{r}
+
+```
+
+```{r}
+
+library(mclust)
+set.seed(123)
+model_based_clusters <- Mclust(principal_components[,1:17])
+plot(model_based_clusters)
+
+
+```
+
+Visualizing the feature distribution in each cluster
+
+```{r}
+loadings <- pca$rotation[, 1:12]
+
+#loadings
+
+# Identify the influential features and their scores
+influential_features <- apply(loadings, 2, function(pc) {
+  real_score <- pc
+  scores <- abs(pc)
+  top_features <- head(order(-scores), 10)
+  data.frame(feature = colnames(df)[top_features], score = round(real_score[top_features],5))
+})
+
+# Print the influential features and scores for each principal component
+for (i in 1:10) {
+  cat("Principal Component", i, ":\n")
+  print(influential_features[i])
+  cat("\n")
+}
+```
+
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+# Assuming "principal_components" is your data matrix
+# and "mbc_labels" contains the cluster labels obtained from model-based clustering
+
+# Combine the cluster labels with the first 4 features of the data
+data_with_labels <- data.frame(principal_components[,1:4], cluster = as.factor(mbc_labels))
+
+# Create a list to store ggplot objects for each cluster
+plots_list <- list()
+
+# Loop through each cluster and create the density plot
+for (cluster_num in unique(mbc_labels)) {
+  # Filter data for the current cluster
+  cluster_data <- data_with_labels[data_with_labels$cluster == cluster_num, ]
+  
+  # Melt the data for ggplot2
+  melted_data <- reshape2::melt(cluster_data, id.vars = "cluster")
+  
+  # Create the overlaid density plot for the current cluster
+  cluster_plot <- ggplot(melted_data, aes(x = value, fill = variable)) +
+    geom_density(alpha = 0.6) +
+    labs(title = paste("Features in Cluster", cluster_num), x = "Value", y = "Density") +
+    theme_minimal()
+  
+  # Store the plot in the plots_list
+  plots_list[[as.character(cluster_num)]] <- cluster_plot
+}
+
+# Arrange the plots in a grid (3 columns)
+grid_plots <- do.call(grid.arrange, c(plots_list, ncol = 3))
+
+# Print the grid of density plots for all 9 clusters
+print(grid_plots)
+
+
+```
+
+
+```{r}
+# Combine the cluster labels with the first 4 features of the data
+data_with_labels <- data.frame(principal_components[,5:9], cluster = as.factor(mbc_labels))
+
+# Create a list to store ggplot objects for each cluster
+plots_list <- list()
+
+# Loop through each cluster and create the density plot
+for (cluster_num in unique(mbc_labels)) {
+  # Filter data for the current cluster
+  cluster_data <- data_with_labels[data_with_labels$cluster == cluster_num, ]
+  
+  # Melt the data for ggplot2
+  melted_data <- reshape2::melt(cluster_data, id.vars = "cluster")
+  
+  # Create the overlaid density plot for the current cluster
+  cluster_plot <- ggplot(melted_data, aes(x = value, fill = variable)) +
+    geom_density(alpha = 0.6) +
+    labs(title = paste("Distribution of Features in Cluster", cluster_num), x = "Value", y = "Density") +
+    theme_minimal()
+  
+  # Store the plot in the plots_list
+  plots_list[[as.character(cluster_num)]] <- cluster_plot
+}
+
+# Arrange the plots in a grid (3 columns)
+grid_plots <- do.call(grid.arrange, c(plots_list, ncol = 3))
+
+# Print the grid of density plots for all 9 clusters
+print(grid_plots)
+
+
+```
+
+
+```{r}
+# Combine the cluster labels with the first 4 features of the data
+data_with_labels <- data.frame(principal_components[,10:14], cluster = as.factor(mbc_labels))
+
+# Create a list to store ggplot objects for each cluster
+plots_list <- list()
+
+# Loop through each cluster and create the density plot
+for (cluster_num in unique(mbc_labels)) {
+  # Filter data for the current cluster
+  cluster_data <- data_with_labels[data_with_labels$cluster == cluster_num, ]
+  
+  # Melt the data for ggplot2
+  melted_data <- reshape2::melt(cluster_data, id.vars = "cluster")
+  
+  # Create the overlaid density plot for the current cluster
+  cluster_plot <- ggplot(melted_data, aes(x = value, fill = variable)) +
+    geom_density(alpha = 0.6) +
+    labs(title = paste("Distribution of Features in Cluster", cluster_num), x = "Value", y = "Density") +
+    theme_minimal()
+  
+  # Store the plot in the plots_list
+  plots_list[[as.character(cluster_num)]] <- cluster_plot
+}
+
+# Arrange the plots in a grid (3 columns)
+grid_plots <- do.call(grid.arrange, c(plots_list, ncol = 3))
+
+# Print the grid of density plots for all 9 clusters
+print(grid_plots)
+
+```
+
+
+```{r}
+# Combine the cluster labels with the first 4 features of the data
+data_with_labels <- data.frame(principal_components[,15:19], cluster = as.factor(mbc_labels))
+
+# Create a list to store ggplot objects for each cluster
+plots_list <- list()
+
+# Loop through each cluster and create the density plot
+for (cluster_num in unique(mbc_labels)) {
+  # Filter data for the current cluster
+  cluster_data <- data_with_labels[data_with_labels$cluster == cluster_num, ]
+  
+  # Melt the data for ggplot2
+  melted_data <- reshape2::melt(cluster_data, id.vars = "cluster")
+  
+  # Create the overlaid density plot for the current cluster
+  cluster_plot <- ggplot(melted_data, aes(x = value, fill = variable)) +
+    geom_density(alpha = 0.6) +
+    labs(title = paste("Distribution of Features in Cluster", cluster_num), x = "Value", y = "Density") +
+    theme_minimal()
+  
+  # Store the plot in the plots_list
+  plots_list[[as.character(cluster_num)]] <- cluster_plot
+}
+
+# Arrange the plots in a grid (3 columns)
+grid_plots <- do.call(grid.arrange, c(plots_list, ncol = 3))
+
+# Print the grid of density plots for all 9 clusters
+print(grid_plots)
+
+```
+
+
+```{r}
+# Combine the cluster labels with the first 4 features of the data
+data_with_labels <- data.frame(principal_components[,20:24], cluster = as.factor(mbc_labels))
+
+# Create a list to store ggplot objects for each cluster
+plots_list <- list()
+
+# Loop through each cluster and create the density plot
+for (cluster_num in unique(mbc_labels)) {
+  # Filter data for the current cluster
+  cluster_data <- data_with_labels[data_with_labels$cluster == cluster_num, ]
+  
+  # Melt the data for ggplot2
+  melted_data <- reshape2::melt(cluster_data, id.vars = "cluster")
+  
+  # Create the overlaid density plot for the current cluster
+  cluster_plot <- ggplot(melted_data, aes(x = value, fill = variable)) +
+    geom_density(alpha = 0.6) +
+    labs(title = paste("Distribution of Features in Cluster", cluster_num), x = "Value", y = "Density") +
+    theme_minimal()
+  
+  # Store the plot in the plots_list
+  plots_list[[as.character(cluster_num)]] <- cluster_plot
+}
+
+# Arrange the plots in a grid (3 columns)
+grid_plots <- do.call(grid.arrange, c(plots_list, ncol = 3))
+
+# Print the grid of density plots for all 9 clusters
+print(grid_plots)
+
+
+```
+
+
+
+```{r}
+
+library(rgl)
+
+# Create a data frame with the cluster labels and principal components
+df <- data.frame(PC1 = principal_components[, 1], PC2 = principal_components[, 2], PC3 = principal_components[, 3], Cluster = factor(mbc_labels))
+
+
+# Define the mapping of cluster numbers to colors
+color_mapping <- c("red", "blue", "green", "orange", "purple", "yellow", "grey", "brown", "black")
+
+open3d()
+
+# Add the 3D scatter plot
+plot3d(df$PC1, df$PC2, df$PC3, 
+       col = color_mapping[as.numeric(df$Cluster)], 
+       size = 3)
+
+rglwidget(elementId = "plot3d", width = 800, height = 600)  # Adjust the width and height as desired
+
+
+close3d()
+
+
+
+
+```
+
+
+```{r}
+
+table(mbc_labels, true_labels)
+
+```
+
+
+```{r}
+
+library(plotly)
+
+library(plotly)
+
+# Create a data frame with the cluster labels and principal components
+df <- data.frame(PC1 = principal_components[, 1], PC2 = principal_components[, 2], PC3 = principal_components[, 3], Cluster = factor(mbc_labels))
+
+# Define the mapping of cluster numbers to colors
+color_mapping <- c("red", "blue", "green", "orange", "purple", "yellow", "grey", "brown", "black")
+
+# Create the 3D scatter plot
+plot_ly(data = df, x = ~PC1, y = ~PC2, z = ~PC3, color = ~Cluster, colors = color_mapping, 
+        marker = list(size = 3), type = "scatter3d") %>%
+  layout(scene = list(xaxis = list(title = "PC1"), 
+                      yaxis = list(title = "PC2"),
+                      zaxis = list(title = "PC3")),
+         title = "Model Based Clustering Results (on Scaled data PCA)")
+
+```
+
+
+Hotelling T test needs to be performed to show that the clusters are significantly different from each other
+
+
+```{r}
+library("ICSNP")
+principal_components[,1:15]
+
+mbc_data <- data.frame(principal_components[,1:15])
+mbc_data$label <- mbc_labels
+
+mcluster_1 <- mbc_data[mbc_data$label=="1",]
+mcluster_2 <- mbc_data[mbc_data$label=="2",]
+
+HotellingsT2(mcluster_1[-16],mcluster_2[-16])
+
+mcluster_3 <- mbc_data[mbc_data$label=="3",]
+mcluster_4 <- mbc_data[mbc_data$label=="4",]
+
+HotellingsT2(mcluster_3[-16], mcluster_4[-16])
+
+mcluster_5 <- mbc_data[mbc_data$label=="5",]
+mcluster_6 <- mbc_data[mbc_data$label=="6",]
+
+HotellingsT2(mcluster_5[-16], mcluster_6[-16])
+
+mcluster_7 <- mbc_data[mbc_data$label=="7",]
+mcluster_8 <- mbc_data[mbc_data$label=="8",]
+
+HotellingsT2(mcluster_6[-16], mcluster_7[-16])
+
+mcluster_9 <- mbc_data[mbc_data$label=="9",]
+
+HotellingsT2(mcluster_9[-16], mcluster_5[-16])
+
+
+
+```
+
+From Cluster Analysis we find some similarity amongst clusters:
+1. Clusters 5 and 9 consist primarily of Pop and Hip Hop
+
+```{r}
+
+summary(mcluster_5)
+
+```
+In this cluster of data, the highest PC mean is seen in PC2 and PC3, followed closely with PC1
+
+PC2 deals with MFCC14,16,20, and percetr_var
+
+PC3 deals with strictly MFCCs
+
+What does this mean exactly?? this question is of significance and needs answering
+
+
+
+```{r}
+
+summary(mcluster_9)
+
+```
+
+In cluster 9 the highest means is observed in PC1 and PC2, followed by PC3 with a gap.
+
+
+PC1 deals strictly with mostly negative values of only MFCCs
+
+
+
+this makes it clear that the defining difference between clusters 5 and 9 is PC1 and PC3, and the huge similarity in genres is because of PC2
+
+Pc2 is significant to both equally. This could signify that Pop and Hip Hop have extremely similar PC2 components
+
+
+Exploring PC2 components in depth we see that:
+
+
+
+
+
+Performing similar analysis on clusters 6 and 7 as they both are Metal, Blues and Rock
+
+
+```{r}
+
+summary(mcluster_5)
+```
+highest mean seen in PC2 and then PC3 and then Pc1 and then Pc4
+
+
+```{r}
+
+summary(mcluster_7)
+```
+highest mean seen in PC1, then Pc3, then pc2. then pc5
+
+
+Here pc1 mean is close to 3 and for cluster 6 its close to 1,16
+
+
+The defining difference again comes from PC1
+
+and the similarity comes from PC3 and pc2
+
+
+
+
