@@ -1,0 +1,78 @@
+---
+title: "Exploratory Clustering of Music Data"
+output: html_notebook
+---
+
+### Part 1: Hierarchical Clustering
+
+
+Setting up the data
+
+```{r}
+
+features <- read.csv('features_30_sec.csv')
+num_features <- features[,!(names(features) %in% c("label", "filename"))]
+
+df <- num_features
+
+scaled_df <- scale(df, center = F)
+
+
+```
+
+
+Using the scaled data to perform hierarchical clustering to find any underlying patterns
+
+1. Single Linkage
+
+```{r}
+set.seed(1234)
+#Dissimilarity matrix of raw data using euclidean distance
+D<- dist(scaled_df, method='euclidean')
+
+hc_single<- hclust(D,method='single')
+plot(hc_single)
+
+```
+
+This dendogram shows the presence of some distinct clusters.
+
+2. Complete Linkage
+
+
+```{r}
+set.seed(1234)
+hc_complete<- hclust(D,method='complete')
+plot(hc_complete)
+
+
+```
+
+3. Average Linkage
+
+```{r}
+set.seed(1234)
+hc_average <- hclust(D,method='average')
+plot(hc_average)
+
+```
+
+
+
+
+```{r}
+
+true_labels <- features$label
+
+for (k in 3:15){
+  clusters <- cutree(hc_average, k=k)
+  hclust_raw <- clusters
+  ari_h <- adjustedRandIndex(true_labels, hclust_raw)
+  print(ari_h)
+  
+}
+
+
+```
+
+

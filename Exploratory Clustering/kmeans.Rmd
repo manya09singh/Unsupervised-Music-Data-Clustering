@@ -1,0 +1,107 @@
+---
+title: "Explorator Clustering"
+output: html_notebook
+---
+
+### Part 2: Using K-Means
+
+Finding the optimum value of k:
+
+
+```{r}
+set.seed(222)
+max_clusters <- 20
+num_runs <- 5  # Number of runs for K-means clustering
+
+# Create a matrix to store the WSS values for each run and each value of k
+wss_matrix <- matrix(nrow = max_clusters, ncol = num_runs)
+
+# Define a set of distinct colors for each run
+colors <- c("blue", "green", "red", "orange", "purple")
+
+# Perform multiple runs of K-means clustering
+for (run in 1:num_runs) {
+  for (k in 1:max_clusters) {
+    kmeans_result <- kmeans(scaled_df, centers = k)
+    wss_matrix[k, run] <- sum(kmeans_result$withinss)
+  }
+}
+
+# Plot the elbow plots for multiple runs in the same plot
+plot(1:max_clusters, wss_matrix[, 1], type = "b", pch = 19, col = colors[1], xlim = c(1, max_clusters),
+     xlab = "Number of Clusters (K)",
+     ylab = "Within-cluster Sum of Squares (WSS)",
+     main = "Elbow Plots for Multiple Runs of K-means Clustering")
+
+# Add lines for the remaining runs with different colors
+for (run in 2:num_runs) {
+  lines(1:max_clusters, wss_matrix[, run], type = "b", pch = 19, col = colors[run])
+}
+
+# Add a legend to distinguish different runs
+legend("topright", legend = paste("Run", 1:num_runs), col = colors, pch = 19, cex = 0.8)
+```
+Each run has a different elbow point.
+
+Find the best value of k from the elbow plot is in the range of 6 to 12
+
+```{r}
+set.seed(222)
+for (k in 2:12) {
+  
+  kc_raw <- kmeans(scaled_df, centers = k)
+  kc_raw_labels <- kc_raw$cluster
+  ari_k <- adjustedRandIndex(true_labels, kc_raw_labels)
+  print(ari_k)
+
+}
+
+```
+
+Highest ARI is seen at k = 10.
+
+For the purpose of exploration, k = 6 is considered, as it is the smallest number of possilbe clusters.
+
+```{r}
+table(kmeans_result$cluster, true_labels)
+
+```
+
+
+```{r}
+set.seed(222)
+# Load required libraries
+library(cluster)
+library(ggplot2)
+library(dplyr)
+library(pheatmap)
+library(viridis)
+
+# Select the features for clustering
+features <- scaled_df
+
+# Choose the number of colors for the palette
+num_colors <- 25
+
+# Create a color palette using the viridis package
+color_palette <- viridis(num_colors)
+
+
+set.seed(222) # For reproducibility
+k <- 6 # Number of clusters
+kmeans_result <- kmeans(features, centers = k)
+
+cluster_centers <- as.matrix(kmeans_result$centers)  # Convert to matrix
+
+legend_breaks <- seq(min(cluster_centers), max(cluster_centers), length.out = length(color_palette) + 1)
+legend_labels <- sprintf("%.2f", legend_breaks[-length(legend_breaks)])
+
+
+pheatmap(t(cluster_centers),
+         cluster_rows = FALSE,cluster_cols = FALSE, 
+         legend = TRUE, main = "K-Means Cluster Centers Heatmap")
+
+```
+
+
+

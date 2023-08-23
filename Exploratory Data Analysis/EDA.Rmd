@@ -16,6 +16,29 @@ df <- num_features
 ```
 
 
+```{r}
+# Convert the "labels" column from list to individual elements
+genre_list <- unlist(features$label)
+
+# Calculate the count of each genre
+genre_counts <- table(genre_list)
+
+# Create a pastel color palette with at least 10 colors
+pastel_colors <- c("#FFB6C1", "#FFD700", "#87CEEB", "#98FB98", "#FFA07A", "#9370DB", "#00FF7F", "#FFC0CB", "#00BFFF", "#FFDAB9")
+
+# If you need more than 10 colors, you can extend the vector with additional pastel color codes.
+
+# Create the pie chart with pastel colors
+pie(genre_counts, main = "Genre Distribution", col = pastel_colors)
+
+# Add labels to the pie chart
+label_percent <- paste0(round(100 * genre_counts / sum(genre_counts), 1), "%")
+label_position <- 2 * cumsum(genre_counts) - 0.5 * genre_counts
+text(label_position, labels = paste(names(genre_counts), "\n", label_percent), col = "black")
+
+```
+
+
 Taking a look at the numerical data
 
 
