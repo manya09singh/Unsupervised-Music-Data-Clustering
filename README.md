@@ -21,3 +21,10 @@ The code for this thesis is divided into the following sections:
 3. Exploratory Clustering - applying non-parametric clustering approaches on the GTZAN data like - Hierarchical, and K-means clustering
 4. Model-based clustering - applying mixture modelling on a reduced dimension subset of the data
 5. Mixture Factor Analysis - applying two main approaches of the IMIFA model - MFA and MIFA on the scaled GTZAN data set. It also contains the results of comparing models across all methods
+
+
+Each code has been written using the language R and can be run using Rstudio.
+
+The data set involved in using each script has been attached to the folder the script is located.
+
+All necessary packages to be installed are part of the code.
