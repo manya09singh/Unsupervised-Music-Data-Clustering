@@ -12,3 +12,12 @@ mirror human perception as well as those that provide standardized clusters.
 The outcomes of this research illuminate the capacity of clustering techniques to emulate human-tagged genres and, conversely, to generate standardized categorizations. The
 exploration highlights the impact of dimensionally reduced data on cluster formation,
 offering insights into the variances within each reduced space and their influence on clustering outcomes.
+
+
+The code for this thesis is divided into the following sections:
+
+1. Data - contains the entire GTZAN data set, and the song files of each track
+2. Exploratory Data Analysis - overview of the numerical variables in this data set, along with its distribution across different genres.
+3. Exploratory Clustering - applying non-parametric clustering approaches on the GTZAN data like - Hierarchical, and K-means clustering
+4. Model-based clustering - applying mixture modelling on a reduced dimension subset of the data
+5. Mixture Factor Analysis - applying two main approaches of the IMIFA model - MFA and MIFA on the scaled GTZAN data set. It also contains the results of comparing models across all methods
